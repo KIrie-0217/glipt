@@ -8,13 +8,13 @@ pub fn cache_dir() -> String {
   home <> "/.cache/glipt"
 }
 
-pub fn cache_key(source: String, meta: ScriptMeta) -> String {
+pub fn cache_key(source: String, meta: ScriptMeta, function: String) -> String {
   let dep_str =
     meta.deps
     |> list.sort(fn(a, b) { string.compare(a.name, b.name) })
     |> list.map(fn(d) { d.name <> ":" <> d.constraint })
     |> string.join(",")
-  let input = source <> "\n" <> dep_str
+  let input = source <> "\n" <> dep_str <> "\n" <> function
   sha256(input)
 }
 

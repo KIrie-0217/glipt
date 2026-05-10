@@ -1,5 +1,5 @@
 name = "glipt"
-version = "1.0.0"
+version = "1.1.0"
 description = "A script runner for Gleam — run .gleam files directly without adding them to src/"
 licences = ["MIT"]
 repository = { type = "github", user = "KIrie-0217", repo = "glipt" }
