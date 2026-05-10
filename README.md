@@ -1,5 +1,7 @@
 # glipt
 
+[![Package Version](https://img.shields.io/hexpm/v/glipt)](https://hex.pm/packages/glipt)
+
 A script runner for Gleam — run `.gleam` files directly without adding them to `src/`.
 
 ## Problem
