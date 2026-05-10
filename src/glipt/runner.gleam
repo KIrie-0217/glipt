@@ -16,22 +16,43 @@ pub type RunError {
   RunError(String)
 }
 
-pub fn run(script_path: String, t: Target) -> Result(String, RunError) {
+pub type RunOptions {
+  RunOptions(
+    script_path: String,
+    target: Target,
+    function: String,
+    args: List(String),
+  )
+}
+
+pub fn run(opts: RunOptions) -> Result(String, RunError) {
   use source <- result.try(
-    simplifile.read(script_path) |> result.map_error(FileError),
+    simplifile.read(opts.script_path) |> result.map_error(FileError),
   )
 
   let parsed = parser.parse(source)
-  let script_dir = path.dirname(script_path)
+  let script_dir = path.dirname(opts.script_path)
   let meta = maybe_inherit_host_deps(parsed, script_dir)
   let key = cache.cache_key(source, meta)
-  let module_name = path.drop_extension(path.basename(script_path))
+  let module_name = path.drop_extension(path.basename(opts.script_path))
+  let entry_module = case opts.function {
+    "main" -> module_name
+    _ -> "glipt_entry"
+  }
 
   case cache.is_cached(key) {
-    True -> execute(key, module_name, t)
+    True -> execute(key, entry_module, opts.target, opts.args)
     False -> {
-      use _ <- result.try(setup_project(key, script_path, source, meta, t))
-      execute(key, module_name, t)
+      use _ <- result.try(setup_project(
+        key,
+        opts.script_path,
+        source,
+        meta,
+        opts.target,
+        opts.function,
+        module_name,
+      ))
+      execute(key, entry_module, opts.target, opts.args)
     }
   }
 }
@@ -42,6 +63,8 @@ fn setup_project(
   source: String,
   meta: parser.ScriptMeta,
   t: Target,
+  function: String,
+  module_name: String,
 ) -> Result(Nil, RunError) {
   let project_dir = cache.cached_project_path(key)
   let src_dir = project_dir <> "/src"
@@ -58,12 +81,27 @@ fn setup_project(
     |> result.map_error(FileError),
   )
 
-  let module_name = path.drop_extension(path.basename(script_path))
   let dest = src_dir <> "/" <> module_name <> ".gleam"
   let clean_source = parser.strip_directives(source)
   use _ <- result.try(
     simplifile.write(dest, clean_source) |> result.map_error(FileError),
   )
+
+  use _ <- result.try(case function {
+    "main" -> Ok(Nil)
+    func -> {
+      let entry_source =
+        "import "
+        <> module_name
+        <> "\n\npub fn main() {\n  "
+        <> module_name
+        <> "."
+        <> func
+        <> "()\n}\n"
+      simplifile.write(src_dir <> "/glipt_entry.gleam", entry_source)
+      |> result.map_error(FileError)
+    }
+  })
 
   use _ <- result.try(
     shellout.command("gleam", ["deps", "download"], project_dir, [
@@ -86,14 +124,15 @@ fn execute(
   key: String,
   module_name: String,
   t: Target,
+  script_args: List(String),
 ) -> Result(String, RunError) {
   let project_dir = cache.cached_project_path(key)
-  shellout.command(
-    "gleam",
-    ["run", "--target", target.to_string(t), "-m", module_name],
-    project_dir,
-    [shellout.LetBeStderr],
-  )
+  let base_args = ["run", "--target", target.to_string(t), "-m", module_name]
+  let args = case script_args {
+    [] -> base_args
+    _ -> list.append(base_args, ["--", ..script_args])
+  }
+  shellout.command("gleam", args, project_dir, [shellout.LetBeStderr])
   |> result.map_error(fn(e) { RunError(e.1) })
 }
 

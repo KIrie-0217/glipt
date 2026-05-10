@@ -4,16 +4,23 @@ import glipt/runner
 import glipt/target
 
 pub fn execute(args: List(String)) -> Nil {
-  let #(t, file) = parse_args(args, target.Erlang)
+  let #(t, func, file, script_args) = parse_args(args, target.Erlang, "main")
   case file {
     "" -> {
       io.println_error("Error: no script file specified")
       io.println_error(
-        "Usage: glipt run [--target erlang|javascript] <file.gleam>",
+        "Usage: glipt run [--target erlang|javascript] [-f function] <file.gleam> [-- args...]",
       )
     }
     p -> {
-      case runner.run(p, t) {
+      let opts =
+        runner.RunOptions(
+          script_path: p,
+          target: t,
+          function: func,
+          args: script_args,
+        )
+      case runner.run(opts) {
         Ok(output) -> io.print(output)
         Error(runner.FileError(e)) ->
           io.println_error("File error: " <> string.inspect(e))
@@ -25,11 +32,18 @@ pub fn execute(args: List(String)) -> Nil {
   }
 }
 
-fn parse_args(args: List(String), t: target.Target) -> #(target.Target, String) {
+fn parse_args(
+  args: List(String),
+  t: target.Target,
+  func: String,
+) -> #(target.Target, String, String, List(String)) {
   case args {
-    ["--target", "erlang", ..rest] -> parse_args(rest, target.Erlang)
-    ["--target", "javascript", ..rest] -> parse_args(rest, target.JavaScript)
-    [file] -> #(t, file)
-    _ -> #(t, "")
+    ["--target", "erlang", ..rest] -> parse_args(rest, target.Erlang, func)
+    ["--target", "javascript", ..rest] ->
+      parse_args(rest, target.JavaScript, func)
+    ["-f", f, ..rest] -> parse_args(rest, t, f)
+    [file, "--", ..script_args] -> #(t, func, file, script_args)
+    [file, ..script_args] -> #(t, func, file, script_args)
+    _ -> #(t, func, "", [])
   }
 }

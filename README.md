@@ -52,6 +52,50 @@ glipt run scripts/check.gleam  # can use my_project's Hex deps
 
 Adding any `//! dep:` or `//! project:` directive disables this and gives the script full control.
 
+### Passing arguments to scripts
+
+Scripts must define `pub fn main()` as the entry point. To accept arguments, use the `argv` package:
+
+```gleam
+//! dep: argv >= 1.0.0 and < 2.0.0
+
+import argv
+import gleam/io
+
+pub fn main() {
+  case argv.load().arguments {
+    [name, ..] -> io.println("Hello, " <> name <> "!")
+    [] -> io.println("Hello, world!")
+  }
+}
+```
+
+```sh
+glipt run greet.gleam -- Alice
+# Hello, Alice!
+```
+
+### Running a specific function
+
+By default, `pub fn main()` is called. Use `-f` to run any other public zero-argument function:
+
+```gleam
+import gleam/io
+
+pub fn main() {
+  io.println("default")
+}
+
+pub fn migrate() {
+  io.println("running migration!")
+}
+```
+
+```sh
+glipt run tasks.gleam -f migrate
+# running migration!
+```
+
 ### Declare dependencies
 
 Add dependencies as directives at the top of the script:
@@ -134,7 +178,7 @@ glipt clean  # Clear all cached builds
 ## CLI reference
 
 ```
-glipt run [--target erlang|javascript] <file.gleam>
+glipt run [--target erlang|javascript] [-f function] <file.gleam> [-- args...]
 glipt add <package@version> <file.gleam>
 glipt project <file.gleam>
 glipt script [<file.gleam>]

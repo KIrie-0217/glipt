@@ -6,7 +6,7 @@ import glipt/cmd/project
 import glipt/cmd/run
 import glipt/cmd/script
 
-const version = "0.2.0"
+const version = "1.0.0"
 
 pub fn main() -> Nil {
   case argv.load().arguments {

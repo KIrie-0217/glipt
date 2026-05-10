@@ -32,7 +32,15 @@ pub fn run_simple_script_test() {
       "import gleam/io\n\npub fn main() {\n  io.println(\"hello\")\n}\n",
     )
 
-  let assert Ok(output) = runner.run(script, target.Erlang)
+  let assert Ok(output) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
   assert string.contains(output, "hello")
 
   teardown(dir)
@@ -47,7 +55,15 @@ pub fn run_with_deps_test() {
       "//! dep: gleam_stdlib >= 0.44.0 and < 2.0.0\n\nimport gleam/int\nimport gleam/io\nimport gleam/list\n\npub fn main() {\n  let sum = list.fold([1, 2, 3], 0, fn(acc, x) { acc + x })\n  io.println(int.to_string(sum))\n}\n",
     )
 
-  let assert Ok(output) = runner.run(script, target.Erlang)
+  let assert Ok(output) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
   assert string.contains(output, "6")
 
   teardown(dir)
@@ -55,7 +71,14 @@ pub fn run_with_deps_test() {
 
 pub fn run_missing_file_test() {
   let assert Error(runner.FileError(_)) =
-    runner.run("/tmp/nonexistent_glipt_script.gleam", target.Erlang)
+    runner.run(
+      runner.RunOptions(
+        script_path: "/tmp/nonexistent_glipt_script.gleam",
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
 }
 
 pub fn run_cache_hit_test() {
@@ -67,8 +90,24 @@ pub fn run_cache_hit_test() {
       "import gleam/io\n\npub fn main() {\n  io.println(\"cached\")\n}\n",
     )
 
-  let assert Ok(_) = runner.run(script, target.Erlang)
-  let assert Ok(output) = runner.run(script, target.Erlang)
+  let assert Ok(_) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
+  let assert Ok(output) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
   assert string.contains(output, "cached")
 
   teardown(dir)
@@ -97,7 +136,15 @@ pub fn run_with_project_directive_test() {
       "//! project: ./mylib\n\nimport gleam/io\nimport mylib\n\npub fn main() {\n  io.println(mylib.greet())\n}\n",
     )
 
-  let assert Ok(output) = runner.run(script, target.Erlang)
+  let assert Ok(output) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
   assert string.contains(output, "hi from mylib")
 
   teardown(dir)
