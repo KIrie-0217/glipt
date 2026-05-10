@@ -6,28 +6,29 @@ A script runner for Gleam — run `.gleam` files directly without adding them to
 
 Gleam requires all code to live in `src/` and be part of a project. There's no way to run a standalone `.gleam` file. This makes it awkward to:
 
-- Run `examples/` files in a library project
 - Write quick one-off scripts
-- Verify code snippets during development
-
-## Solution
-
-```sh
-glipt run script.gleam
-```
-
-glipt creates a temporary project context, compiles, and executes the script, then cleans up. If run inside an existing Gleam project, it automatically makes that project's dependencies available to the script.
+- Run `examples/` files in a library project
+- Share self-contained utilities without a full project structure
 
 ## Installation
 
+### Nix (recommended)
+
 ```sh
-gleam add --dev glipt
+# Run directly
+nix run github:KIrie-0217/glipt -- run script.gleam
+
+# Install to profile
+nix profile install github:KIrie-0217/glipt
 ```
 
-Or install globally as an escript:
+### From source
 
 ```sh
-gleam run -m glipt/install
+git clone https://github.com/KIrie-0217/glipt.git
+cd glipt
+gleam export erlang-shipment
+# Use build/erlang-shipment/entrypoint.sh run
 ```
 
 ## Usage
@@ -35,79 +36,117 @@ gleam run -m glipt/install
 ### Run a script
 
 ```sh
-glipt run examples/basic.gleam
+glipt run script.gleam
 ```
 
-### Run with dependencies from current project
+### Declare dependencies
 
-When inside a Gleam project directory, glipt automatically detects `gleam.toml` and makes all dependencies available:
-
-```sh
-cd my_project/
-glipt run scripts/check.gleam  # can import my_project's deps
-```
-
-### Declare script-level dependencies
-
-Add dependencies in a comment at the top of the script:
+Add dependencies as directives at the top of the script:
 
 ```gleam
-//! dep: gliff >= 1.0.0
-//! dep: gleam_json >= 2.0.0
+//! gleam: >= 1.0.0
+//! dep: gleam_json >= 2.0.0 and < 3.0.0
 
-import gliff
+import gleam/io
+import gleam/json
+
+pub fn main() {
+  io.println("hello")
+}
+```
+
+> [!NOTE]
+> `//! dep:` directives use the same version constraint syntax as `gleam.toml`
+> (e.g. `>= 1.0.0 and < 2.0.0`). Only packages published on
+> [Hex](https://hex.pm) are supported — git and path dependencies cannot be
+> declared via `//! dep:`. Use `//! project:` to reference a local project
+> instead (see below).
+
+### Add a dependency
+
+```sh
+glipt add gleam_json@2.0.0 script.gleam
+```
+
+This inserts `//! dep: gleam_json >= 2.0.0 and < 3.0.0` into the file.
+
+### Use host project modules
+
+When your script lives inside a Gleam project, declare it with `//! project:`:
+
+```gleam
+//! project: .
+//! dep: gleam_stdlib >= 0.44.0 and < 2.0.0
+
+import my_lib/parser
 import gleam/io
 
 pub fn main() {
-  let edits = gliff.diff("hello", "world")
-  io.println("done")
+  io.println(parser.do_something("test"))
 }
 ```
+
+Without `//! project:`, the host project is never implicitly loaded — scripts remain portable.
 
 ### Target selection
 
 ```sh
-glipt run --target erlang script.gleam   # default
+glipt run --target erlang script.gleam     # default
 glipt run --target javascript script.gleam
 ```
 
-### Watch mode
+### Script ↔ Project conversion
 
-Re-run automatically when the script file changes:
+Graduate a script into a full project:
 
 ```sh
-glipt watch script.gleam
+glipt project script.gleam
+# Creates ./script/gleam.toml + ./script/src/script.gleam
 ```
 
-## How It Works
+Export a project's dependencies as script directives:
 
-1. Parse the script file for `//! dep:` directives
-2. If inside a Gleam project, read its `gleam.toml` for additional dependencies
-3. Create a temporary project in a cache directory (`~/.cache/glipt/<hash>/`)
-4. Symlink or copy the script as `src/script.gleam`
-5. Generate a `gleam.toml` with resolved dependencies
-6. Run `gleam run -m script`
-7. Cache the build for subsequent runs (invalidated by script content hash)
+```sh
+cd my_project/
+glipt script tool.gleam
+# Writes //! dep: lines into tool.gleam from gleam.toml
+```
 
-## Caching
+### Cache management
 
-glipt caches compiled builds keyed by:
-- Script content hash (SHA-256)
-- Dependency set
+```sh
+glipt clean  # Clear all cached builds
+```
 
-Subsequent runs of the same script skip compilation entirely, making execution near-instant after the first run.
+## CLI reference
 
-## Limitations
+```
+glipt run [--target erlang|javascript] <file.gleam>
+glipt add <package@version> <file.gleam>
+glipt project <file.gleam>
+glipt script [<file.gleam>]
+glipt clean
+glipt --version
+glipt --help
+```
 
-- Scripts must define `pub fn main()` as the entry point
-- Importing modules from the host project's `src/` is not supported (only its dependencies)
-- The first run of a script incurs a compilation cost (~1-2 seconds)
+## How it works
+
+1. Parse `//! dep:`, `//! gleam:`, and `//! project:` directives
+2. Compute a SHA-256 cache key from script content + dependencies
+3. On cache miss: create a temp project in `~/.cache/glipt/<hash>/`, run `gleam build`
+4. On cache hit: skip compilation
+5. Execute via `gleam run`
+
+Subsequent runs of an unchanged script are near-instant.
+
 
 ## Development
 
 ```sh
-gleam test
-gleam run -m glipt -- run example.gleam
+nix develop        # or install gleam + erlang + rebar3 manually
+gleam test         # unit + integration tests
+gleam format src test
 ```
 
 ## License
