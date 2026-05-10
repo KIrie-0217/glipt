@@ -28,7 +28,6 @@ script.gleam → parse deps → generate temp project → gleam build + run → 
 | `glipt/parser` | Parse `//! dep:` directives from script files |
 | `glipt/project` | Detect host project, read gleam.toml, merge dependencies |
 | `glipt/cache` | Content hashing, cache directory management, invalidation |
-| `glipt/watcher` | File change detection for watch mode |
 
 ### Key design decisions
 
@@ -93,7 +92,6 @@ Always run `gleam format src test` before committing.
 
 ```
 glipt run [--target erlang|javascript] <file.gleam>
-glipt watch [--target erlang|javascript] <file.gleam>
 glipt add <package[@version]> <file.gleam>  # add dep directive to script
 glipt project <file.gleam>   # script → project (new directory)
 glipt script [<file.gleam>]  # project → script (create or update)
