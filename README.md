@@ -105,8 +105,15 @@ glipt add <package@version> <file.gleam>
 glipt project <file.gleam>
 glipt script [<file.gleam>]
 glipt clean
-glipt --version
+glipt --version | -v
+glipt --help | -h
 ```
+
+| Option | Description |
+|---|---|
+| `-f function` | Run a specific public function instead of `main` |
+| `--target` | Set compilation target (`erlang` or `javascript`) |
+| `-- args...` | Pass arguments to the script (use `argv` package to read) |
 
 ## How it works
 

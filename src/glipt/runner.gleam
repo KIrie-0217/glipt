@@ -33,7 +33,7 @@ pub fn run(opts: RunOptions) -> Result(String, RunError) {
   let parsed = parser.parse(source)
   let script_dir = path.dirname(opts.script_path)
   let meta = maybe_inherit_host_deps(parsed, script_dir)
-  let key = cache.cache_key(source, meta)
+  let key = cache.cache_key(source, meta, opts.function)
   let module_name = path.drop_extension(path.basename(opts.script_path))
   let entry_module = case opts.function {
     "main" -> module_name
