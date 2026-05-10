@@ -1,6 +1,9 @@
+import gleam/list
 import gleam/result
+import gleam/string
 import glipt/internal/cache
 import glipt/internal/path
+import glipt/internal/project
 import glipt/internal/toml
 import glipt/parser
 import glipt/target.{type Target}
@@ -18,7 +21,9 @@ pub fn run(script_path: String, t: Target) -> Result(String, RunError) {
     simplifile.read(script_path) |> result.map_error(FileError),
   )
 
-  let meta = parser.parse(source)
+  let parsed = parser.parse(source)
+  let script_dir = path.dirname(script_path)
+  let meta = maybe_inherit_host_deps(parsed, script_dir)
   let key = cache.cache_key(source, meta)
   let module_name = path.drop_extension(path.basename(script_path))
 
@@ -90,4 +95,74 @@ fn execute(
     [shellout.LetBeStderr],
   )
   |> result.map_error(fn(e) { RunError(e.1) })
+}
+
+fn maybe_inherit_host_deps(
+  meta: parser.ScriptMeta,
+  script_dir: String,
+) -> parser.ScriptMeta {
+  let has_directives =
+    meta.gleam_constraint != Error(Nil)
+    || !list.is_empty(meta.deps)
+    || !list.is_empty(meta.project_paths)
+  case has_directives {
+    True -> meta
+    False ->
+      case project.find_project_root(script_dir) {
+        Error(Nil) -> meta
+        Ok(root) ->
+          case simplifile.read(root <> "/gleam.toml") {
+            Error(_) -> meta
+            Ok(content) -> {
+              let deps = toml.parse_deps(content)
+              let resolved_deps = resolve_relative_paths(deps, root)
+              let gleam_constraint = toml.parse_gleam_version(content)
+              parser.ScriptMeta(
+                gleam_constraint: gleam_constraint,
+                project_paths: [],
+                deps: resolved_deps,
+              )
+            }
+          }
+      }
+  }
+}
+
+fn resolve_relative_paths(
+  deps: List(parser.Dependency),
+  project_root: String,
+) -> List(parser.Dependency) {
+  list.map(deps, fn(dep) {
+    case string.contains(dep.constraint, "path") {
+      True -> {
+        let resolved = resolve_path_in_constraint(dep.constraint, project_root)
+        parser.Dependency(..dep, constraint: resolved)
+      }
+      False -> dep
+    }
+  })
+}
+
+fn resolve_path_in_constraint(
+  constraint: String,
+  project_root: String,
+) -> String {
+  case string.split_once(constraint, "path") {
+    Ok(#(before, after)) ->
+      case string.split_once(after, "\"") {
+        Ok(#(middle, rest)) ->
+          case string.split_once(rest, "\"") {
+            Ok(#(rel_path, end)) -> {
+              let abs_path = case string.starts_with(rel_path, "/") {
+                True -> rel_path
+                False -> project_root <> "/" <> rel_path
+              }
+              before <> "path" <> middle <> "\"" <> abs_path <> "\"" <> end
+            }
+            Error(Nil) -> constraint
+          }
+        Error(Nil) -> constraint
+      }
+    Error(Nil) -> constraint
+  }
 }

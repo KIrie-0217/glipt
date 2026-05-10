@@ -59,7 +59,14 @@ fn format_dep_lines(deps: List(Dependency)) -> String {
     list.map(deps, fn(dep) {
       case dep.constraint {
         "" -> dep.name <> " = \">= 0.0.0\""
-        c -> dep.name <> " = \"" <> c <> "\""
+        c ->
+          case string.starts_with(c, "{") {
+            True -> dep.name <> " = " <> c
+            False -> {
+              let clean = string.replace(c, "\"", "")
+              dep.name <> " = \"" <> clean <> "\""
+            }
+          }
       }
     })
   case lines {
@@ -124,11 +131,11 @@ fn collect_key_values(lines: List(String)) -> List(Dependency) {
           case string.split_once(trimmed, "=") {
             Ok(#(key, value)) -> {
               let name = string.trim(key)
-              let constraint = value |> string.trim |> string.replace("\"", "")
+              let val = string.trim(value)
               case name {
                 "" -> collect_key_values(rest)
                 _ -> [
-                  Dependency(name: name, constraint: constraint),
+                  Dependency(name: name, constraint: val),
                   ..collect_key_values(rest)
                 ]
               }

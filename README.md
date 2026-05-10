@@ -43,6 +43,15 @@ gleam export erlang-shipment
 glipt run script.gleam
 ```
 
+When run inside a Gleam project (a parent directory has `gleam.toml`), scripts with no `//!` directives automatically inherit the project's dependencies:
+
+```sh
+cd my_project/
+glipt run scripts/check.gleam  # can use my_project's Hex deps
+```
+
+Adding any `//! dep:` or `//! project:` directive disables this and gives the script full control.
+
 ### Declare dependencies
 
 Add dependencies as directives at the top of the script:

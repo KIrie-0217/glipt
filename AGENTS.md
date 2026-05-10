@@ -48,6 +48,10 @@ Script-level dependencies are declared as structured comments:
 
 If `//! project: <path>` is declared, the project at that path is added as a path dependency. Its transitive dependencies become available to the script. The script's own `//! dep:` constraints take precedence on conflict.
 
+### Auto-inherit from host project
+
+When a script has **no directives at all** (no `//! dep:`, `//! gleam:`, or `//! project:`) and resides inside a Gleam project (a parent directory contains `gleam.toml`), glipt automatically inherits that project's `[dependencies]`. This enables zero-config scripting within existing projects — scripts can use the project's Hex dependencies without any boilerplate. Adding any directive disables this behavior and gives the script full control.
+
 ## Caching strategy
 
 ```
