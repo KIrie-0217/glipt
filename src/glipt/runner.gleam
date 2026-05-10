@@ -33,18 +33,23 @@ pub fn run(opts: RunOptions) -> Result(String, RunError) {
   let parsed = parser.parse(source)
   let script_dir = path.dirname(opts.script_path)
   let meta = maybe_inherit_host_deps(parsed, script_dir)
-  let key = cache.cache_key(source, meta, opts.function)
+  let slot = cache.slot_key(opts.script_path, opts.function)
+  let hash = cache.content_hash(source, meta, opts.function)
   let module_name = path.drop_extension(path.basename(opts.script_path))
   let entry_module = case opts.function {
     "main" -> module_name
     _ -> "glipt_entry"
   }
 
-  case cache.is_cached(key) {
-    True -> execute(key, entry_module, opts.target, opts.args)
+  case cache.is_cached(slot, hash) {
+    True -> {
+      let _ = cache.touch_last_used(slot)
+      execute(slot, entry_module, opts.target, opts.args)
+    }
     False -> {
+      let _ = cache.gc()
       use _ <- result.try(setup_project(
-        key,
+        slot,
         opts.script_path,
         source,
         meta,
@@ -52,13 +57,16 @@ pub fn run(opts: RunOptions) -> Result(String, RunError) {
         opts.function,
         module_name,
       ))
-      execute(key, entry_module, opts.target, opts.args)
+      use _ <- result.try(
+        cache.write_metadata(slot, hash) |> result.map_error(FileError),
+      )
+      execute(slot, entry_module, opts.target, opts.args)
     }
   }
 }
 
 fn setup_project(
-  key: String,
+  slot: String,
   script_path: String,
   source: String,
   meta: parser.ScriptMeta,
@@ -66,8 +74,9 @@ fn setup_project(
   function: String,
   module_name: String,
 ) -> Result(Nil, RunError) {
-  let project_dir = cache.cached_project_path(key)
+  let project_dir = cache.slot_path(slot)
   let src_dir = project_dir <> "/src"
+  let _ = simplifile.delete(project_dir)
 
   use _ <- result.try(cache.ensure_cache_dir() |> result.map_error(FileError))
   use _ <- result.try(
@@ -121,12 +130,12 @@ fn setup_project(
 }
 
 fn execute(
-  key: String,
+  slot: String,
   module_name: String,
   t: Target,
   script_args: List(String),
 ) -> Result(String, RunError) {
-  let project_dir = cache.cached_project_path(key)
+  let project_dir = cache.slot_path(slot)
   let base_args = ["run", "--target", target.to_string(t), "-m", module_name]
   let args = case script_args {
     [] -> base_args
