@@ -10,6 +10,8 @@ Gleam requires all code to live in `src/` and be part of a project. There's no w
 - Run `examples/` files in a library project
 - Share self-contained utilities without a full project structure
 
+glipt is lightweight — only 4 runtime dependencies (`gleam_stdlib`, `argv`, `simplifile`, `shellout`).
+
 ## Installation
 
 ### Nix (recommended)

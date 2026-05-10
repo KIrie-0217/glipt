@@ -6,7 +6,6 @@ repository = { type = "github", user = "KIrie-0217", repo = "glipt" }
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
-gleam_erlang = ">= 0.34.0 and < 2.0.0"
 argv = ">= 1.0.0 and < 2.0.0"
 simplifile = ">= 2.0.0 and < 3.0.0"
 shellout = ">= 1.6.0 and < 2.0.0"
