@@ -22,7 +22,7 @@ gleam export erlang-shipment
 ```sh
 glipt run script.gleam                   # run a script
 glipt run script.gleam -f migrate        # run a specific function
-glipt run script.gleam -- arg1 arg2      # pass arguments
+glipt run script.gleam -- arg1 arg2      # pass arguments (use argv package to read)
 glipt add gleam_json@2.0.0 script.gleam  # add a dependency
 ```
 
