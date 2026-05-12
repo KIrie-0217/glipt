@@ -53,13 +53,16 @@ pub fn content_hash_changes_with_source_test() {
 pub fn slot_reused_on_edit_test() {
   let dir = setup_temp_dir("slot_reuse")
   let script = dir <> "/reuse.gleam"
+  let out_file = dir <> "/output.txt"
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "import gleam/io\n\npub fn main() {\n  io.println(\"v1\")\n}\n",
+      "//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport simplifile\n\npub fn main() {\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", \"v1\")\n}\n",
     )
 
-  let assert Ok(output1) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -68,7 +71,9 @@ pub fn slot_reused_on_edit_test() {
         args: [],
       ),
     )
-  assert string.contains(output1, "v1")
+
+  let assert Ok(content1) = simplifile.read(out_file)
+  assert content1 == "v1"
 
   let slot = cache.slot_key(script, "main")
   let slot_dir = cache.slot_path(slot)
@@ -77,10 +82,12 @@ pub fn slot_reused_on_edit_test() {
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "import gleam/io\n\npub fn main() {\n  io.println(\"v2\")\n}\n",
+      "//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport simplifile\n\npub fn main() {\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", \"v2\")\n}\n",
     )
 
-  let assert Ok(output2) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -89,7 +96,9 @@ pub fn slot_reused_on_edit_test() {
         args: [],
       ),
     )
-  assert string.contains(output2, "v2")
+
+  let assert Ok(content2) = simplifile.read(out_file)
+  assert content2 == "v2"
 
   let assert Ok(entries) = simplifile.read_directory(cache.cache_dir())
   let slot_entries =
@@ -134,7 +143,7 @@ pub fn last_used_updated_on_cache_hit_test() {
       "import gleam/io\n\npub fn main() {\n  io.println(\"ok\")\n}\n",
     )
 
-  let assert Ok(_) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -148,7 +157,7 @@ pub fn last_used_updated_on_cache_hit_test() {
   let last_used_path = cache.slot_path(slot) <> "/.last_used"
   let assert Ok(ts1_str) = simplifile.read(last_used_path)
 
-  let assert Ok(_) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -229,7 +238,7 @@ pub fn pool_restores_across_slots_test() {
       "import gleam/io\n\npub fn main() {\n  io.println(\"a\")\n}\n",
     )
 
-  let assert Ok(_) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script_a,
@@ -248,7 +257,7 @@ pub fn pool_restores_across_slots_test() {
       "import gleam/io\n\npub fn main() {\n  io.println(\"b\")\n}\n",
     )
 
-  let assert Ok(_) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script_b,

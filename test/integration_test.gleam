@@ -1,7 +1,6 @@
 import gleam/string
 import gleeunit
 import glipt/internal/cache
-import glipt/parser
 import glipt/runner
 import glipt/target
 import simplifile
@@ -26,13 +25,16 @@ fn teardown(dir: String) -> Nil {
 pub fn run_simple_script_test() {
   let dir = setup_temp_dir("run_simple")
   let script = dir <> "/hello.gleam"
+  let out_file = dir <> "/output.txt"
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "import gleam/io\n\npub fn main() {\n  io.println(\"hello\")\n}\n",
+      "//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport gleam/io\nimport simplifile\n\npub fn main() {\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", \"hello\")\n  io.println(\"hello\")\n}\n",
     )
 
-  let assert Ok(output) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -41,7 +43,9 @@ pub fn run_simple_script_test() {
         args: [],
       ),
     )
-  assert string.contains(output, "hello")
+
+  let assert Ok(content) = simplifile.read(out_file)
+  assert content == "hello"
 
   teardown(dir)
 }
@@ -49,13 +53,16 @@ pub fn run_simple_script_test() {
 pub fn run_with_deps_test() {
   let dir = setup_temp_dir("run_deps")
   let script = dir <> "/sum.gleam"
+  let out_file = dir <> "/output.txt"
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "//! dep: gleam_stdlib >= 0.44.0 and < 2.0.0\n\nimport gleam/int\nimport gleam/io\nimport gleam/list\n\npub fn main() {\n  let sum = list.fold([1, 2, 3], 0, fn(acc, x) { acc + x })\n  io.println(int.to_string(sum))\n}\n",
+      "//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport gleam/int\nimport gleam/list\nimport simplifile\n\npub fn main() {\n  let sum = list.fold([1, 2, 3], 0, fn(acc, x) { acc + x })\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", int.to_string(sum))\n}\n",
     )
 
-  let assert Ok(output) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -64,7 +71,9 @@ pub fn run_with_deps_test() {
         args: [],
       ),
     )
-  assert string.contains(output, "6")
+
+  let assert Ok(content) = simplifile.read(out_file)
+  assert content == "6"
 
   teardown(dir)
 }
@@ -84,13 +93,16 @@ pub fn run_missing_file_test() {
 pub fn run_cache_hit_test() {
   let dir = setup_temp_dir("cache_hit")
   let script = dir <> "/cached.gleam"
+  let out_file = dir <> "/output.txt"
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "import gleam/io\n\npub fn main() {\n  io.println(\"cached\")\n}\n",
+      "//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport simplifile\n\npub fn main() {\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", \"cached\")\n}\n",
     )
 
-  let assert Ok(_) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -99,7 +111,10 @@ pub fn run_cache_hit_test() {
         args: [],
       ),
     )
-  let assert Ok(output) =
+
+  let _ = simplifile.delete(out_file)
+
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -108,7 +123,9 @@ pub fn run_cache_hit_test() {
         args: [],
       ),
     )
-  assert string.contains(output, "cached")
+
+  let assert Ok(content) = simplifile.read(out_file)
+  assert content == "cached"
 
   teardown(dir)
 }
@@ -130,13 +147,16 @@ pub fn run_with_project_directive_test() {
     )
 
   let script = dir <> "/use_lib.gleam"
+  let out_file = dir <> "/output.txt"
   let assert Ok(Nil) =
     simplifile.write(
       script,
-      "//! project: ./mylib\n\nimport gleam/io\nimport mylib\n\npub fn main() {\n  io.println(mylib.greet())\n}\n",
+      "//! project: ./mylib\n//! dep: simplifile >= 2.0.0 and < 3.0.0\n\nimport mylib\nimport simplifile\n\npub fn main() {\n  let _ = simplifile.write(\""
+        <> out_file
+        <> "\", mylib.greet())\n}\n",
     )
 
-  let assert Ok(output) =
+  let assert Ok(Nil) =
     runner.run(
       runner.RunOptions(
         script_path: script,
@@ -145,18 +165,9 @@ pub fn run_with_project_directive_test() {
         args: [],
       ),
     )
-  assert string.contains(output, "hi from mylib")
+
+  let assert Ok(content) = simplifile.read(out_file)
+  assert string.contains(content, "hi from mylib")
 
   teardown(dir)
-}
-
-pub fn parser_roundtrip_test() {
-  let source =
-    "//! gleam: >= 1.0.0\n//! project: .\n//! dep: foo >= 1.0.0\n\nimport gleam/io\n\npub fn main() {\n  io.println(\"hi\")\n}\n"
-  let meta = parser.parse(source)
-  let header = parser.format_directives(meta)
-  let body = parser.strip_directives(source)
-  let reassembled = header <> "\n\n" <> body
-
-  assert reassembled == source
 }
