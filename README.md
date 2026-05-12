@@ -23,7 +23,8 @@ gleam export erlang-shipment
 glipt run script.gleam                   # run a script
 glipt run script.gleam -f migrate        # run a specific function
 glipt run script.gleam -- arg1 arg2      # pass arguments (use argv package to read)
-glipt add gleam_json@2.0.0 script.gleam  # add a dependency
+glipt add gleam_json script.gleam        # add dep (auto-resolve version from Hex)
+glipt add gleam_json@2.0.0 script.gleam  # add dep with explicit version
 ```
 
 ## Script directives
@@ -101,7 +102,7 @@ glipt script tool.gleam      # ← writes //! dep: lines from gleam.toml
 
 ```
 glipt run [--target erlang|javascript] [-f function] <file.gleam> [-- args...]
-glipt add <package@version> <file.gleam>
+glipt add <package[@version]> <file.gleam>
 glipt project <file.gleam>
 glipt script [<file.gleam>]
 glipt clean
@@ -118,9 +119,10 @@ glipt --help | -h
 ## How it works
 
 1. Parse directives → compute SHA-256 cache key
-2. Cache miss: generate temp project in `~/.cache/glipt/<hash>/`, build
-3. Cache hit: skip build
-4. Execute via `gleam run`
+2. Cache hit → skip build, execute immediately
+3. Cache miss → generate temp project in `~/.cache/glipt/<hash>/`, build, execute
+
+Compiled dependency artifacts are shared across scripts via a package pool (`~/.cache/glipt/.packages/`). Within the same script, `build/` is preserved across edits so only the script itself is recompiled.
 
 Subsequent runs of unchanged scripts are near-instant.
 

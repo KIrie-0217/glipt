@@ -6,7 +6,7 @@ import glipt/cmd/project
 import glipt/cmd/run
 import glipt/cmd/script
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 pub fn main() -> Nil {
   case argv.load().arguments {
@@ -26,7 +26,7 @@ fn print_help() -> Nil {
 
 Usage:
   glipt run [--target erlang|javascript] [-f function] <file.gleam> [-- args...]
-  glipt add <package@version> <file.gleam>
+  glipt add <package[@version]> <file.gleam>
   glipt project <file.gleam>
   glipt script [<file.gleam>]
   glipt clean
