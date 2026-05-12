@@ -1,4 +1,5 @@
 import gleam/list
+import gleam/result
 import gleam/string
 import glipt/internal/project
 import glipt/parser.{type Dependency, type ScriptMeta, Dependency}
@@ -144,6 +145,35 @@ fn collect_key_values(lines: List(String)) -> List(Dependency) {
           }
       }
     }
+  }
+}
+
+pub fn parse_manifest_packages(content: String) -> List(#(String, String)) {
+  let lines = string.split(content, "\n")
+  list.filter_map(lines, fn(line) {
+    let trimmed = string.trim(line)
+    case string.contains(trimmed, "name = \"") {
+      True -> parse_manifest_line(trimmed)
+      False -> Error(Nil)
+    }
+  })
+}
+
+fn parse_manifest_line(line: String) -> Result(#(String, String), Nil) {
+  use name <- result.try(extract_field(line, "name"))
+  use version <- result.map(extract_field(line, "version"))
+  #(name, version)
+}
+
+fn extract_field(line: String, field: String) -> Result(String, Nil) {
+  let prefix = field <> " = \""
+  case string.split_once(line, prefix) {
+    Ok(#(_, rest)) ->
+      case string.split_once(rest, "\"") {
+        Ok(#(value, _)) -> Ok(value)
+        Error(Nil) -> Error(Nil)
+      }
+    Error(Nil) -> Error(Nil)
   }
 }
 

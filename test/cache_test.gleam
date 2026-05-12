@@ -167,3 +167,100 @@ pub fn last_used_updated_on_cache_hit_test() {
 }
 
 import gleam/list
+import glipt/internal/toml
+
+pub fn package_pool_key_test() {
+  assert cache.package_pool_key("gleam_stdlib", "1.0.0", "erlang")
+    == "gleam_stdlib@1.0.0+erlang"
+  assert cache.package_pool_key("gleam_json", "3.1.0", "javascript")
+    == "gleam_json@3.1.0+javascript"
+}
+
+pub fn gc_preserves_packages_dir_test() {
+  let _ = cache.clear_cache()
+  let _ = cache.ensure_cache_dir()
+
+  let pkg_dir = cache.packages_dir() <> "/gleam_stdlib@1.0.0+erlang"
+  let assert Ok(Nil) = simplifile.create_directory_all(pkg_dir)
+  let fresh_ts = int.to_string(2_000_000_000)
+  let assert Ok(Nil) = simplifile.write(pkg_dir <> "/.last_used", fresh_ts)
+
+  let assert Ok(Nil) = cache.gc()
+
+  let assert Ok(True) = simplifile.is_directory(cache.packages_dir())
+  let assert Ok(True) = simplifile.is_directory(pkg_dir)
+
+  let _ = cache.clear_cache()
+  Nil
+}
+
+pub fn gc_removes_stale_packages_test() {
+  let _ = cache.clear_cache()
+  let _ = cache.ensure_cache_dir()
+
+  let pkg_dir = cache.packages_dir() <> "/old_pkg@0.1.0+erlang"
+  let assert Ok(Nil) = simplifile.create_directory_all(pkg_dir)
+  let old_ts = int.to_string(0)
+  let assert Ok(Nil) = simplifile.write(pkg_dir <> "/.last_used", old_ts)
+
+  let assert Ok(Nil) = cache.gc()
+
+  let assert Ok(False) = simplifile.is_directory(pkg_dir)
+
+  let _ = cache.clear_cache()
+  Nil
+}
+
+pub fn parse_manifest_packages_test() {
+  let content =
+    "packages = [\n  { name = \"gleam_stdlib\", version = \"1.0.0\", build_tools = [\"gleam\"] },\n  { name = \"gleam_json\", version = \"3.1.0\", build_tools = [\"gleam\"] },\n]\n"
+  let packages = toml.parse_manifest_packages(content)
+  assert packages == [#("gleam_stdlib", "1.0.0"), #("gleam_json", "3.1.0")]
+}
+
+pub fn pool_restores_across_slots_test() {
+  let _ = cache.clear_cache()
+  let dir = setup_temp_dir("pool_cross")
+
+  let script_a = dir <> "/a.gleam"
+  let assert Ok(Nil) =
+    simplifile.write(
+      script_a,
+      "import gleam/io\n\npub fn main() {\n  io.println(\"a\")\n}\n",
+    )
+
+  let assert Ok(_) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script_a,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
+
+  let assert Ok(True) = simplifile.is_directory(cache.packages_dir())
+
+  let script_b = dir <> "/b.gleam"
+  let assert Ok(Nil) =
+    simplifile.write(
+      script_b,
+      "import gleam/io\n\npub fn main() {\n  io.println(\"b\")\n}\n",
+    )
+
+  let assert Ok(_) =
+    runner.run(
+      runner.RunOptions(
+        script_path: script_b,
+        target: target.Erlang,
+        function: "main",
+        args: [],
+      ),
+    )
+
+  let slot_b = cache.slot_key(script_b, "main")
+  let stdlib_dir = cache.slot_path(slot_b) <> "/build/dev/erlang/gleam_stdlib"
+  let assert Ok(True) = simplifile.is_directory(stdlib_dir)
+
+  teardown(dir)
+}

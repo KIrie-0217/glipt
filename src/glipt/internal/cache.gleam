@@ -12,6 +12,32 @@ pub fn cache_dir() -> String {
   home <> "/.cache/glipt"
 }
 
+pub fn packages_dir() -> String {
+  cache_dir() <> "/.packages"
+}
+
+pub fn package_pool_key(name: String, version: String, target: String) -> String {
+  name <> "@" <> version <> "+" <> target
+}
+
+pub fn package_pool_path(key: String) -> String {
+  packages_dir() <> "/" <> key
+}
+
+pub fn is_package_cached(key: String) -> Bool {
+  let dir = package_pool_path(key)
+  case simplifile.is_directory(dir) {
+    Ok(True) -> True
+    _ -> False
+  }
+}
+
+pub fn touch_package_used(key: String) -> Result(Nil, simplifile.FileError) {
+  let dir = package_pool_path(key)
+  let ts = int.to_string(unix_timestamp())
+  simplifile.write(dir <> "/.last_used", ts)
+}
+
 pub fn slot_key(script_path: String, function: String) -> String {
   let abs = resolve_path(script_path)
   sha256(abs <> "\n" <> function)
@@ -72,39 +98,49 @@ pub fn clear_cache() -> Result(Nil, simplifile.FileError) {
 
 pub fn gc() -> Result(Nil, simplifile.FileError) {
   let dir = cache_dir()
+  gc_directory(dir)
+  gc_directory(packages_dir())
+  Ok(Nil)
+}
+
+fn gc_directory(dir: String) -> Nil {
   let ttl = get_ttl_seconds()
   let now = unix_timestamp()
   case simplifile.read_directory(dir) {
     Ok(entries) -> {
       list.each(entries, fn(entry) {
-        let entry_path = dir <> "/" <> entry
-        let last_used_path = entry_path <> "/.last_used"
-        case simplifile.read(last_used_path) {
-          Ok(ts_str) -> {
-            case int.parse(string.trim(ts_str)) {
-              Ok(ts) ->
-                case now - ts > ttl {
-                  True -> {
+        case string.starts_with(entry, ".") {
+          True -> Nil
+          False -> {
+            let entry_path = dir <> "/" <> entry
+            let last_used_path = entry_path <> "/.last_used"
+            case simplifile.read(last_used_path) {
+              Ok(ts_str) -> {
+                case int.parse(string.trim(ts_str)) {
+                  Ok(ts) ->
+                    case now - ts > ttl {
+                      True -> {
+                        let _ = simplifile.delete(entry_path)
+                        Nil
+                      }
+                      False -> Nil
+                    }
+                  Error(Nil) -> {
                     let _ = simplifile.delete(entry_path)
                     Nil
                   }
-                  False -> Nil
                 }
-              Error(Nil) -> {
+              }
+              Error(_) -> {
                 let _ = simplifile.delete(entry_path)
                 Nil
               }
             }
           }
-          Error(_) -> {
-            let _ = simplifile.delete(entry_path)
-            Nil
-          }
         }
       })
-      Ok(Nil)
     }
-    Error(_) -> Ok(Nil)
+    Error(_) -> Nil
   }
 }
 

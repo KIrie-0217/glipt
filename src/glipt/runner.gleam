@@ -76,7 +76,8 @@ fn setup_project(
 ) -> Result(Nil, RunError) {
   let project_dir = cache.slot_path(slot)
   let src_dir = project_dir <> "/src"
-  let _ = simplifile.delete(project_dir)
+  let _ = simplifile.delete(src_dir)
+  let _ = simplifile.delete(project_dir <> "/gleam.toml")
 
   use _ <- result.try(cache.ensure_cache_dir() |> result.map_error(FileError))
   use _ <- result.try(
@@ -119,14 +120,110 @@ fn setup_project(
     |> result.map_error(fn(e) { BuildError("deps download failed: " <> e.1) }),
   )
 
-  shellout.command(
-    "gleam",
-    ["build", "--target", target.to_string(t)],
-    project_dir,
-    [shellout.LetBeStderr],
+  let target_str = target.to_string(t)
+  restore_packages_from_pool(project_dir, target_str)
+
+  use _ <- result.try(
+    shellout.command("gleam", ["build", "--target", target_str], project_dir, [
+      shellout.LetBeStderr,
+    ])
+    |> result.map_error(fn(e) { BuildError(e.1) }),
   )
-  |> result.map_error(fn(e) { BuildError(e.1) })
-  |> result.map(fn(_) { Nil })
+
+  save_packages_to_pool(project_dir, target_str)
+  Ok(Nil)
+}
+
+fn restore_packages_from_pool(project_dir: String, target_str: String) -> Nil {
+  let manifest_path = project_dir <> "/manifest.toml"
+  case simplifile.read(manifest_path) {
+    Ok(content) -> {
+      let packages = toml.parse_manifest_packages(content)
+      let build_dir = project_dir <> "/build/dev/" <> target_str
+      let _ = simplifile.create_directory_all(build_dir)
+      let any_restored =
+        list.fold(packages, False, fn(acc, pkg) {
+          let #(name, version) = pkg
+          let key = cache.package_pool_key(name, version, target_str)
+          let dest = build_dir <> "/" <> name
+          case cache.is_package_cached(key), simplifile.is_directory(dest) {
+            True, Ok(True) -> {
+              let _ = cache.touch_package_used(key)
+              acc
+            }
+            True, _ -> {
+              let pool_path = cache.package_pool_path(key)
+              let _ = simplifile.copy_directory(at: pool_path, to: dest)
+              let _ = cache.touch_package_used(key)
+              True
+            }
+            _, _ -> acc
+          }
+        })
+      case any_restored {
+        True -> copy_gleam_version_from_pool(build_dir)
+        False -> Nil
+      }
+    }
+    Error(_) -> Nil
+  }
+}
+
+fn save_packages_to_pool(project_dir: String, target_str: String) -> Nil {
+  let manifest_path = project_dir <> "/manifest.toml"
+  case simplifile.read(manifest_path) {
+    Ok(content) -> {
+      let packages = toml.parse_manifest_packages(content)
+      let _ = simplifile.create_directory_all(cache.packages_dir())
+      save_gleam_version_to_pool(project_dir, target_str)
+      list.each(packages, fn(pkg) {
+        let #(name, version) = pkg
+        let key = cache.package_pool_key(name, version, target_str)
+        case cache.is_package_cached(key) {
+          True -> {
+            let _ = cache.touch_package_used(key)
+            Nil
+          }
+          False -> {
+            let src = project_dir <> "/build/dev/" <> target_str <> "/" <> name
+            case simplifile.is_directory(src) {
+              Ok(True) -> {
+                let dest = cache.package_pool_path(key)
+                let _ = simplifile.copy_directory(at: src, to: dest)
+                let _ = cache.touch_package_used(key)
+                Nil
+              }
+              _ -> Nil
+            }
+          }
+        }
+      })
+    }
+    Error(_) -> Nil
+  }
+}
+
+fn copy_gleam_version_from_pool(build_dir: String) -> Nil {
+  let src = cache.packages_dir() <> "/.gleam_version"
+  case simplifile.read(src) {
+    Ok(content) -> {
+      let _ = simplifile.write(build_dir <> "/gleam_version", content)
+      Nil
+    }
+    Error(_) -> Nil
+  }
+}
+
+fn save_gleam_version_to_pool(project_dir: String, target_str: String) -> Nil {
+  let src = project_dir <> "/build/dev/" <> target_str <> "/gleam_version"
+  let dest = cache.packages_dir() <> "/.gleam_version"
+  case simplifile.read(src) {
+    Ok(content) -> {
+      let _ = simplifile.write(dest, content)
+      Nil
+    }
+    Error(_) -> Nil
+  }
 }
 
 fn execute(
