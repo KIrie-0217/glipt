@@ -21,7 +21,7 @@ pub fn execute(args: List(String)) -> Nil {
           args: script_args,
         )
       case runner.run(opts) {
-        Ok(output) -> io.print(output)
+        Ok(Nil) -> Nil
         Error(runner.FileError(e)) ->
           io.println_error("File error: " <> string.inspect(e))
         Error(runner.BuildError(msg)) ->

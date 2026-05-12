@@ -14,7 +14,7 @@
 ### Core workflow
 
 ```
-script.gleam → parse deps → generate temp project → gleam build + run → output
+script.gleam → parse deps → generate temp project → gleam build → in-process execution
                                     ↓
                             ~/.cache/glipt/<hash>/
 ```
@@ -35,6 +35,7 @@ script.gleam → parse deps → generate temp project → gleam build + run → 
 - **Symlink over copy**: Link script into temp project's `src/` to avoid duplication
 - **Explicit host project**: Only loaded when `//! project: <path>` is declared. Adds the host as a path dependency in the temp project's `gleam.toml`
 - **Erlang-only**: The tool itself targets Erlang (for filesystem/process operations), but scripts can target either Erlang or JavaScript via `--target`
+- **In-process execution (Erlang target)**: For Erlang-target scripts, `.beam` files are loaded directly into the glipt BEAM process via `code:add_patha` + `apply/3`, avoiding a second BEAM startup. JavaScript target falls back to `gleam run` subprocess
 
 ## Dependency resolution
 
@@ -63,8 +64,8 @@ When a script has **no directives at all** (no `//! dep:`, `//! gleam:`, or `//!
       ...
 ```
 
-Cache hit: hash matches → skip compilation → directly run from cached build.
-Cache miss: create project, `gleam deps download`, `gleam build`, then run.
+Cache hit: hash matches → skip compilation → load `.beam` in-process.
+Cache miss: create project, `gleam deps download`, restore package pool, `gleam build`, then run.
 
 ## Development Guidelines
 
@@ -73,6 +74,16 @@ Cache miss: create project, `gleam deps download`, `gleam build`, then run.
 Write implementation → write tests → pass tests → move on.
 
 Always run `gleam format src test` before committing.
+
+### Version management
+
+Version is defined in three places — all must be updated together on release:
+
+| File | Field |
+|------|-------|
+| `gleam.toml` | `version = "X.Y.Z"` |
+| `src/glipt.gleam` | `const version = "X.Y.Z"` |
+| `flake.nix` | `version = "X.Y.Z";` |
 
 ### Design principles
 

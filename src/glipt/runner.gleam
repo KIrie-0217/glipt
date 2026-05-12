@@ -1,3 +1,4 @@
+import gleam/io
 import gleam/list
 import gleam/result
 import gleam/string
@@ -25,7 +26,7 @@ pub type RunOptions {
   )
 }
 
-pub fn run(opts: RunOptions) -> Result(String, RunError) {
+pub fn run(opts: RunOptions) -> Result(Nil, RunError) {
   use source <- result.try(
     simplifile.read(opts.script_path) |> result.map_error(FileError),
   )
@@ -231,15 +232,68 @@ fn execute(
   module_name: String,
   t: Target,
   script_args: List(String),
-) -> Result(String, RunError) {
+) -> Result(Nil, RunError) {
   let project_dir = cache.slot_path(slot)
+  case t {
+    target.Erlang -> execute_erl(project_dir, module_name, script_args)
+    target.JavaScript -> execute_gleam(project_dir, module_name, t, script_args)
+  }
+}
+
+fn execute_erl(
+  project_dir: String,
+  module_name: String,
+  script_args: List(String),
+) -> Result(Nil, RunError) {
+  let build_dir = project_dir <> "/build/dev/erlang"
+  case simplifile.read_directory(build_dir) {
+    Ok(entries) -> {
+      let ebin_paths =
+        entries
+        |> list.filter(fn(e) {
+          !string.starts_with(e, ".") && e != "gleam_version"
+        })
+        |> list.map(fn(e) { build_dir <> "/" <> e <> "/ebin" })
+      run_module(ebin_paths, module_name, script_args)
+      |> result.map(fn(_) { Nil })
+      |> result.map_error(fn(e) { RunError(e) })
+    }
+    Error(e) ->
+      Error(RunError("Cannot read build directory: " <> string.inspect(e)))
+  }
+}
+
+@external(erlang, "glipt_ffi", "run_module")
+fn run_module(
+  ebin_paths: List(String),
+  module: String,
+  script_args: List(String),
+) -> Result(String, String)
+
+fn execute_gleam(
+  project_dir: String,
+  module_name: String,
+  t: Target,
+  script_args: List(String),
+) -> Result(Nil, RunError) {
   let base_args = ["run", "--target", target.to_string(t), "-m", module_name]
   let args = case script_args {
     [] -> base_args
     _ -> list.append(base_args, ["--", ..script_args])
   }
   shellout.command("gleam", args, project_dir, [shellout.LetBeStderr])
+  |> result.map(fn(output) { print_stdout(output) })
   |> result.map_error(fn(e) { RunError(e.1) })
+}
+
+fn print_stdout(s: String) -> Nil {
+  case s {
+    "" -> Nil
+    _ -> {
+      let _ = io.print(s)
+      Nil
+    }
+  }
 }
 
 fn maybe_inherit_host_deps(
