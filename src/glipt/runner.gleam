@@ -233,6 +233,46 @@ fn execute(
   script_args: List(String),
 ) -> Result(String, RunError) {
   let project_dir = cache.slot_path(slot)
+  case t {
+    target.Erlang -> execute_erl(project_dir, module_name, script_args)
+    target.JavaScript -> execute_gleam(project_dir, module_name, t, script_args)
+  }
+}
+
+fn execute_erl(
+  project_dir: String,
+  module_name: String,
+  script_args: List(String),
+) -> Result(String, RunError) {
+  let build_dir = project_dir <> "/build/dev/erlang"
+  case simplifile.read_directory(build_dir) {
+    Ok(entries) -> {
+      let pa_args =
+        entries
+        |> list.filter(fn(e) {
+          !string.starts_with(e, ".") && e != "gleam_version"
+        })
+        |> list.flat_map(fn(e) { ["-pa", build_dir <> "/" <> e <> "/ebin"] })
+      let eval = module_name <> ":main(), init:stop()."
+      let base_args = list.flatten([pa_args, ["-noshell", "-eval", eval]])
+      let args = case script_args {
+        [] -> base_args
+        _ -> list.append(base_args, ["-extra", ..script_args])
+      }
+      shellout.command("erl", args, project_dir, [shellout.LetBeStderr])
+      |> result.map_error(fn(e) { RunError(e.1) })
+    }
+    Error(e) ->
+      Error(RunError("Cannot read build directory: " <> string.inspect(e)))
+  }
+}
+
+fn execute_gleam(
+  project_dir: String,
+  module_name: String,
+  t: Target,
+  script_args: List(String),
+) -> Result(String, RunError) {
   let base_args = ["run", "--target", target.to_string(t), "-m", module_name]
   let args = case script_args {
     [] -> base_args

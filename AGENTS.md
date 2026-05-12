@@ -74,6 +74,16 @@ Write implementation → write tests → pass tests → move on.
 
 Always run `gleam format src test` before committing.
 
+### Version management
+
+Version is defined in three places — all must be updated together on release:
+
+| File | Field |
+|------|-------|
+| `gleam.toml` | `version = "X.Y.Z"` |
+| `src/glipt.gleam` | `const version = "X.Y.Z"` |
+| `flake.nix` | `version = "X.Y.Z";` |
+
 ### Design principles
 
 - Fast feedback: cached scripts run in <100ms
